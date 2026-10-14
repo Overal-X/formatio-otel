@@ -70,6 +70,56 @@ scripts/trigger.sh https://<javascript app domain> checkout 5
 scripts/trigger.sh https://<javascript app domain> checkout-ok 5
 ```
 
+## Scenario: a broken service deep down takes the frontend with it
+
+`GET /dashboard` on the **JavaScript** app is the opposite of checkout: the frontend is where
+the failure shows, and the trace leads you to the service that caused it.
+
+```
+JavaScript (frontend)     Go (API)                 Python (widgets)          Go (rates)
+GET /dashboard ─────────▶ GET /api/dashboard
+                          └ load profile
+                          ├ GET /recommendations ─▶ ✓ rank items
+                          └ GET /loyalty ─────────▶ GET /loyalty
+                                                    └ load points
+                                                    └ GET /internal/rates ──▶ GET /internal/rates
+                                                                              └ query rates-db
+                                                                                ✗ connection refused
+                                                    ◀── 503 ────────────────
+                          ◀── 502 ───────────────── "rates answered 503"
+◀── 502 {"error": …} ──── fails the whole page instead of the one widget
+✗ TypeError: Cannot read properties of undefined (reading 'name')   in renderDashboard
+500 to the user
+```
+
+Each hop has its own small bug that lets the failure through — loyalty passes the outage on,
+the API fails the whole dashboard over one widget, the frontend renders an error body as if it
+were data — which is the point: what the user sees is three services away from what broke.
+
+What Formatio should show:
+
+- **Tools → Errors**: the frontend's `TypeError` (in `renderDashboard`) is what someone notices
+  first. Open its trace from an occurrence.
+- **The waterfall** spans all three applications and labels **origin** on Go's `query rates-db`
+  — `dial tcp 10.0.4.12:5432: connect: connection refused` — the first exception in the trace,
+  with the 503 → 502 → 502 → 500 chain above it.
+- Also in Errors: Go's `connection refused` group and Python's status-only `GET /loyalty` (HTTP
+  502). Python's `HTTPError` from calling rates is not its own group: rates already recorded
+  that failure. Go's `GET /api/dashboard` usually opens none either, because its spans are
+  exported together with the rates exception from the same process.
+
+`GET /dashboard?healthy=1` takes the same path with the rates database up and renders the page.
+
+It reuses the checkout variables (`ORDERS_URL` on JavaScript, `PAYMENTS_URL` on Go) and needs
+one more, on Python, pointing back at Go — `GO_URL=http://otel-go:8080` (it falls back to
+`DOWNSTREAM_URL`). `GO_URL` and `PYTHON_URL` also work on JavaScript and Go in place of the
+checkout names.
+
+```sh
+scripts/trigger.sh https://<javascript app domain> dashboard 5
+scripts/trigger.sh https://<javascript app domain> dashboard-ok 5
+```
+
 ## Deploy on Formatio
 
 Create three applications from this repository in **one project** (so they share its

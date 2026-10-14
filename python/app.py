@@ -21,7 +21,7 @@ tracer = trace.get_tracer("otel-python")
 
 @app.get("/")
 def index():
-    return "otel-python: /ok /slow?ms=1500 /exception /not-found/<id> /status-500 /crash /downstream?path=/exception, POST /charge (checkout scenario)\n"
+    return "otel-python: /ok /slow?ms=1500 /exception /not-found/<id> /status-500 /crash /downstream?path=/exception, POST /charge (checkout scenario), /recommendations and /loyalty (dashboard scenario)\n"
 
 
 @app.get("/healthz")
@@ -109,6 +109,35 @@ def charge():
     with tracer.start_as_current_span("capture payment"):
         time.sleep((10 + random.random() * 30) / 1000)
     return {"status": "captured", "amount": payment["amount"], "fee": fee}, 201
+
+
+# The dashboard scenario (see the README): two widgets the API fetches for the frontend. Loyalty
+# needs exchange rates from the Go app, and that is where everything breaks.
+
+
+@app.get("/recommendations")
+def recommendations():
+    with tracer.start_as_current_span("rank items"):
+        time.sleep((10 + random.random() * 20) / 1000)
+    return [{"sku": "kb-01", "title": "Mechanical keyboard"}, {"sku": "mouse-02", "title": "Wireless mouse"}]
+
+
+@app.get("/loyalty")
+def loyalty():
+    base = os.environ.get("GO_URL") or os.environ.get("DOWNSTREAM_URL")
+    if not base:
+        return "set GO_URL (e.g. http://otel-go:8080)\n", 400
+    with tracer.start_as_current_span("load points"):
+        points = 12840
+    suffix = "?healthy=1" if request.args.get("healthy") else ""
+    try:
+        with urllib.request.urlopen(f"{base}/internal/rates{suffix}", timeout=5) as response:
+            rates = json.load(response)
+    except HTTPError as error:
+        # Passed on as this widget's own failure rather than recovered from.
+        trace.get_current_span().set_status(Status(StatusCode.ERROR, f"rates answered {error.code}"))
+        return {"error": f"exchange rates unavailable ({error.code})"}, 502
+    return {"points": points, "value": round(points * 0.01 * rates["EUR"], 2), "currency": "EUR"}
 
 
 @app.errorhandler(Exception)

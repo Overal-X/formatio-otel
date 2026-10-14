@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -59,6 +60,8 @@ func main() {
 	mux.HandleFunc("GET /crash", crash)
 	mux.HandleFunc("GET /downstream", downstream)
 	mux.HandleFunc("POST /orders", createOrder)
+	mux.HandleFunc("GET /api/dashboard", dashboard)
+	mux.HandleFunc("GET /internal/rates", rates)
 
 	// recoverPanics sits inside otelhttp so the server span is still current when it records.
 	handler := otelhttp.NewHandler(recoverPanics(mux), "otel-go",
@@ -102,7 +105,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	fmt.Fprintln(w, "otel-go: /ok /slow?ms=1500 /exception /not-found/{id} /status-500 /crash /downstream?path=/exception, POST /orders (checkout scenario)")
+	fmt.Fprintln(w, "otel-go: /ok /slow?ms=1500 /exception /not-found/{id} /status-500 /crash /downstream?path=/exception, POST /orders (checkout scenario), /api/dashboard and /internal/rates (dashboard scenario)")
 }
 
 // ok makes a small tree of child spans: the happy path the waterfall should nest.
@@ -264,4 +267,99 @@ func createOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"order": fmt.Sprintf("ord_%d", rand.IntN(1_000_000)), "charged": o.Total})
+}
+
+// The dashboard scenario (see the README): this service is both the API the frontend calls and,
+// two hops further down, the rates service whose database outage breaks everything above it.
+
+var errRatesDB = errors.New("dial tcp 10.0.4.12:5432: connect: connection refused")
+
+// rates is the service that breaks: its database is down, so every lookup fails.
+// ?healthy=1 answers normally, for comparison.
+func rates(w http.ResponseWriter, r *http.Request) {
+	_, span := tracer.Start(r.Context(), "query rates-db", trace.WithAttributes(
+		attribute.String("db.system", "postgresql"),
+		attribute.String("db.operation", "SELECT"),
+	))
+	time.Sleep(time.Duration(20+rand.IntN(20)) * time.Millisecond)
+	if r.URL.Query().Get("healthy") == "" {
+		err := fmt.Errorf("load exchange rates: %w", errRatesDB)
+		span.RecordError(err, trace.WithStackTrace(true))
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
+		trace.SpanFromContext(r.Context()).SetStatus(codes.Error, "rates database unavailable")
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "rates database unavailable"})
+		return
+	}
+	span.End()
+	writeJSON(w, http.StatusOK, map[string]any{"base": "USD", "EUR": 0.92, "GBP": 0.79})
+}
+
+// dashboard is the API behind the frontend's dashboard. It fetches the widgets in parallel and
+// fails the whole page when one of them fails — the missing graceful degradation that lets one
+// broken service take the frontend down with it.
+func dashboard(w http.ResponseWriter, r *http.Request) {
+	base := os.Getenv("PYTHON_URL")
+	if base == "" {
+		base = os.Getenv("PAYMENTS_URL")
+	}
+	if base == "" {
+		http.Error(w, "set PYTHON_URL (or PAYMENTS_URL), e.g. http://otel-python:8080", http.StatusBadRequest)
+		return
+	}
+	suffix := ""
+	if r.URL.Query().Get("healthy") != "" {
+		suffix = "?healthy=1"
+	}
+
+	ctx := r.Context()
+	_, profile := tracer.Start(ctx, "load profile")
+	time.Sleep(time.Duration(5+rand.IntN(10)) * time.Millisecond)
+	profile.End()
+
+	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport), Timeout: 10 * time.Second}
+	widgets := map[string]string{"recommendations": "/recommendations", "loyalty": "/loyalty" + suffix}
+	results := map[string]json.RawMessage{}
+	failures := map[string]int{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for name, path := range widgets {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+			resp, err := client.Do(req)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failures[name] = http.StatusBadGateway
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode >= 400 {
+				failures[name] = resp.StatusCode
+				return
+			}
+			results[name] = body
+		}()
+	}
+	wg.Wait()
+
+	for name, status := range failures {
+		trace.SpanFromContext(ctx).SetStatus(codes.Error, fmt.Sprintf("%s widget answered %d", name, status))
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": name + " unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"profile":         map[string]any{"name": "Ada", "plan": "pro"},
+		"recommendations": results["recommendations"],
+		"loyalty":         results["loyalty"],
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
 }

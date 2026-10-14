@@ -14,6 +14,8 @@
 #   downstream  calls DOWNSTREAM_URL/exception → one trace across two apps, origin marked
 #   checkout    frontend error that breaks orders and payments (run against the JavaScript app)
 #   checkout-ok the same flow with clean prices, for comparison
+#   dashboard   a broken service three hops down that takes the frontend with it (JavaScript app)
+#   dashboard-ok the same path with every service healthy
 set -euo pipefail
 
 base="${1:?usage: trigger.sh <base-url> <scenario> [count]}"
@@ -32,6 +34,8 @@ for i in $(seq 1 "$count"); do
     downstream) path="/downstream?path=/exception" ;;
     checkout) path="/checkout" ;;
     checkout-ok) path="/checkout?healthy=1" ;;
+    dashboard) path="/dashboard" ;;
+    dashboard-ok) path="/dashboard?healthy=1" ;;
     *) echo "unknown scenario: $scenario" >&2; exit 2 ;;
   esac
   status=$(curl -sk -o /dev/null -w '%{http_code}' "$base$path")

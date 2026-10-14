@@ -10,7 +10,7 @@ const app = express()
 
 app.get('/', (_req, res) => {
   res.send(
-    'otel-javascript: /ok /slow?ms=1500 /exception /not-found/:id /status-500 /crash /downstream?path=/exception /checkout[?healthy=1]\n',
+    'otel-javascript: /ok /slow?ms=1500 /exception /not-found/:id /status-500 /crash /downstream?path=/exception /checkout[?healthy=1] /dashboard[?healthy=1]\n',
   )
 })
 
@@ -152,6 +152,31 @@ function priceCart(cart) {
 
 class PriceFormatError extends Error {
   name = 'PriceFormatError'
+}
+
+// The dashboard scenario (see the README): this app is the frontend. It asks the API for every
+// widget and renders whatever comes back, assuming success. Three services down, the rates
+// database is out; the failure climbs back up as 503, 502, 502, and the frontend crashes
+// rendering an error body as if it were data. ?healthy=1 takes the same path cleanly.
+app.get('/dashboard', async (req, res) => {
+  const apiUrl = process.env.GO_URL || process.env.ORDERS_URL
+  if (!apiUrl) {
+    res.status(400).send('set GO_URL (or ORDERS_URL), e.g. http://otel-go:8080\n')
+    return
+  }
+  const suffix = req.query.healthy ? '?healthy=1' : ''
+  const response = await fetch(`${apiUrl}/api/dashboard${suffix}`)
+  const data = await response.json()
+  res.send(renderDashboard(data))
+})
+
+function renderDashboard(data) {
+  return [
+    `Welcome back, ${data.profile.name}`,
+    `Recommended: ${data.recommendations.map((r) => r.title).join(', ')}`,
+    `Loyalty: ${data.loyalty.points.toLocaleString()} points (${data.loyalty.value} ${data.loyalty.currency})`,
+    '',
+  ].join('\n')
 }
 
 // Express 5 forwards thrown errors and rejected promises here. Recording them on the server
