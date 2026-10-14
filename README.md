@@ -193,3 +193,8 @@ request in the expected group.
 Known: anonymous handlers (the Express routes here) get a culprit like `at /app/app.js`,
 because line numbers are stripped so groups survive deploys. Different error types still
 group apart.
+
+scripts/trigger.sh https://javascript.localhost dashboard 5
+scripts/trigger.sh https://javascript.localhost dashboard-ok 5
+scripts/trigger.sh https://javascript.localhost checkout 5
+scripts/trigger.sh https://javascript.localhost checkout-ok 5
