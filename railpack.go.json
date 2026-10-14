@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": { "go": "1.26" },
+  "steps": {
+    "build": {
+      "inputs": [{ "step": "packages:mise" }, { "local": true, "include": ["go"] }],
+      "commands": [
+        { "path": "/go/bin" },
+        "cd go && CGO_ENABLED=0 go build -o /app/bin/otel-go ."
+      ]
+    }
+  },
+  "deploy": {
+    "inputs": [{ "step": "build", "include": ["/app/bin"] }],
+    "startCommand": "/app/bin/otel-go"
+  }
+}

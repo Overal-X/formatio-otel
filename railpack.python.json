@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": { "python": "3.13" },
+  "steps": {
+    "build": {
+      "inputs": [{ "step": "packages:mise" }, { "local": true, "include": ["python"] }],
+      "commands": ["python -m venv /app/.venv", "/app/.venv/bin/pip install --no-cache-dir -r python/requirements.txt"]
+    }
+  },
+  "deploy": {
+    "inputs": [
+      {
+        "step": "packages:mise",
+        "include": ["/mise/shims", "/mise/installs", "/usr/local/bin/mise", "/etc/mise/config.toml", "/root/.local/state/mise"]
+      },
+      { "step": "build", "include": ["/app/.venv", "/app/python"] }
+    ],
+    "startCommand": "cd /app/python && /app/.venv/bin/opentelemetry-instrument /app/.venv/bin/python app.py",
+    "variables": {
+      "PYTHONUNBUFFERED": "1",
+      "OTEL_TRACES_EXPORTER": "otlp_proto_http",
+      "OTEL_METRICS_EXPORTER": "none",
+      "OTEL_LOGS_EXPORTER": "none"
+    }
+  }
+}

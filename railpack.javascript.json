@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": {
+    "node": "22"
+  },
+  "steps": {
+    "build": {
+      "inputs": [
+        {
+          "step": "packages:mise"
+        },
+        {
+          "local": true,
+          "include": [
+            "javascript"
+          ],
+          "exclude": [
+            "javascript/node_modules"
+          ]
+        }
+      ],
+      "commands": [
+        "cd javascript && npm ci --omit=dev"
+      ]
+    }
+  },
+  "deploy": {
+    "aptPackages": [
+      "libatomic1"
+    ],
+    "inputs": [
+      {
+        "step": "packages:mise",
+        "include": [
+          "/mise/shims",
+          "/mise/installs",
+          "/usr/local/bin/mise",
+          "/etc/mise/config.toml",
+          "/root/.local/state/mise"
+        ]
+      },
+      {
+        "step": "build",
+        "include": [
+          "/app/javascript"
+        ]
+      }
+    ],
+    "startCommand": "cd /app/javascript && npm start",
+    "variables": {
+      "NODE_ENV": "production",
+      "OTEL_METRICS_EXPORTER": "none",
+      "OTEL_LOGS_EXPORTER": "none",
+      "OTEL_NODE_RESOURCE_DETECTORS": "env,host,os,process,serviceinstance,container"
+    }
+  }
+}

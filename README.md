@@ -30,7 +30,21 @@ traces arrive, the injection works.
 ## Deploy on Formatio
 
 Create three applications from this repository in **one project** (so they share its
-network), with the **Dockerfile** builder:
+network). Either builder works.
+
+**Railpack, from the repository root** — leave *Directory* empty and pick the config:
+
+| Application name | Builder | Config file |
+| --- | --- | --- |
+| `otel-go` | Railpack | `railpack.go.json` |
+| `otel-javascript` | Railpack | `railpack.javascript.json` |
+| `otel-python` | Railpack | `railpack.python.json` |
+
+Railpack only detects a language at the root of what it builds, and the root has no
+`go.mod`, `package.json` or `requirements.txt`, so each config names its runtime, builds its
+folder and says how to start it.
+
+**Dockerfile** — one folder per application:
 
 | Application name | Dockerfile | Build context |
 | --- | --- | --- |
@@ -77,7 +91,8 @@ OTEL_TRACES_EXPORTER=otlp_proto_http opentelemetry-instrument python app.py`.
 
 ## Verified so far
 
-All three were run locally against a sink built on `pkgs/otel`'s own decoder and grouping
+All three Railpack configs and Dockerfiles build (Railpack 0.23 against BuildKit) and the
+images serve every route. All three were also run locally against a sink built on `pkgs/otel`'s own decoder and grouping
 (not a deployed Formatio): every SDK accepted the injected header format, `/downstream`
 propagated one trace id across apps, and each scenario produced exactly one occurrence per
 request in the expected group.
