@@ -91,9 +91,9 @@ OTEL_TRACES_EXPORTER=otlp_proto_http opentelemetry-instrument python app.py`.
 
 ## Verified so far
 
-All three Railpack configs and Dockerfiles build (Railpack 0.23 against BuildKit) and the
-images serve every route. All three were also run locally against a sink built on `pkgs/otel`'s own decoder and grouping
-(not a deployed Formatio): every SDK accepted the injected header format, `/downstream`
+All three Railpack configs and Dockerfiles build (Railpack 0.23 against BuildKit), and each
+image answers `/healthz` and `/exception`. The apps themselves were run locally against a sink
+built on `pkgs/otel`'s own decoder and grouping (not a deployed Formatio): every SDK accepted the injected header format, `/downstream`
 propagated one trace id across apps, and each scenario produced exactly one occurrence per
 request in the expected group.
 
