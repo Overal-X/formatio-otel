@@ -1,4 +1,4 @@
-# formatio-otel
+# Formatio OTel Test Projects
 
 Test targets for Formatio's tracing and error tracking (`specs/otel-tracing.md` in the
 formatio repo). One small HTTP app per language, all serving the same routes, each route
@@ -8,37 +8,37 @@ Every app uses the stock OpenTelemetry SDK and is configured **only** by the `OT
 variables Formatio injects. Nothing in here points at an endpoint or holds a token: if
 traces arrive, the injection works.
 
-| Folder | Stack | Started by |
-| --- | --- | --- |
-| `go/` | `net/http` + `otelhttp`, OTLP/HTTP exporter | `main.go` sets up the SDK from env |
+| Folder        | Stack                                                   | Started by                              |
+| ------------- | ------------------------------------------------------- | --------------------------------------- |
+| `go/`         | `net/http` + `otelhttp`, OTLP/HTTP exporter             | `main.go` sets up the SDK from env      |
 | `javascript/` | Express 5 + `@opentelemetry/auto-instrumentations-node` | `node --require …/register` (zero-code) |
-| `python/` | Flask + `opentelemetry-distro` | `opentelemetry-instrument` (zero-code) |
+| `python/`     | Flask + `opentelemetry-distro`                          | `opentelemetry-instrument` (zero-code)  |
 
 ## Routes (all three apps)
 
-| Route | What it does | Expect in Formatio |
-| --- | --- | --- |
-| `/ok` | 200, three nested child spans | A trace with a nested waterfall |
-| `/slow?ms=1500` | One long child span | Shows under the `> 1 s` filter |
-| `/exception` | The same exception from the same line | **One** group whose count grows |
-| `/not-found/:id` | Exception, message varies per id | Still **one** group (same stack) |
-| `/status-500` | 500 with no exception recorded | A status-only group named after the route |
-| `/crash` | Go panic / rejected promise / `ZeroDivisionError` | One group each |
-| `/downstream?path=/exception` | Calls `DOWNSTREAM_URL` + path | **One trace across two apps**, the thrower marked *origin*; the caller gets its own `/downstream` group, the thrower its exception group |
-| `/healthz` | 200 | — |
+| Route                         | What it does                                      | Expect in Formatio                                                                                                                       |
+| ----------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `/ok`                         | 200, three nested child spans                     | A trace with a nested waterfall                                                                                                          |
+| `/slow?ms=1500`               | One long child span                               | Shows under the `> 1 s` filter                                                                                                           |
+| `/exception`                  | The same exception from the same line             | **One** group whose count grows                                                                                                          |
+| `/not-found/:id`              | Exception, message varies per id                  | Still **one** group (same stack)                                                                                                         |
+| `/status-500`                 | 500 with no exception recorded                    | A status-only group named after the route                                                                                                |
+| `/crash`                      | Go panic / rejected promise / `ZeroDivisionError` | One group each                                                                                                                           |
+| `/downstream?path=/exception` | Calls `DOWNSTREAM_URL` + path                     | **One trace across two apps**, the thrower marked _origin_; the caller gets its own `/downstream` group, the thrower its exception group |
+| `/healthz`                    | 200                                               | —                                                                                                                                        |
 
 ## Deploy on Formatio
 
 Create three applications from this repository in **one project** (so they share its
 network). Either builder works.
 
-**Railpack, from the repository root** — leave *Directory* empty and pick the config:
+**Railpack, from the repository root** — leave _Directory_ empty and pick the config:
 
-| Application name | Builder | Config file |
-| --- | --- | --- |
-| `otel-go` | Railpack | `railpack.go.json` |
+| Application name  | Builder  | Config file                |
+| ----------------- | -------- | -------------------------- |
+| `otel-go`         | Railpack | `railpack.go.json`         |
 | `otel-javascript` | Railpack | `railpack.javascript.json` |
-| `otel-python` | Railpack | `railpack.python.json` |
+| `otel-python`     | Railpack | `railpack.python.json`     |
 
 Railpack only detects a language at the root of what it builds, and the root has no
 `go.mod`, `package.json` or `requirements.txt`, so each config names its runtime, builds its
@@ -46,11 +46,11 @@ folder and says how to start it.
 
 **Dockerfile** — one folder per application:
 
-| Application name | Dockerfile | Build context |
-| --- | --- | --- |
-| `otel-go` | `go/Dockerfile` | `go` |
-| `otel-javascript` | `javascript/Dockerfile` | `javascript` |
-| `otel-python` | `python/Dockerfile` | `python` |
+| Application name  | Dockerfile              | Build context |
+| ----------------- | ----------------------- | ------------- |
+| `otel-go`         | `go/Dockerfile`         | `go`          |
+| `otel-javascript` | `javascript/Dockerfile` | `javascript`  |
+| `otel-python`     | `python/Dockerfile`     | `python`      |
 
 For each one:
 
@@ -71,7 +71,7 @@ scripts/trigger.sh https://<otel-python domain> exception 20
 scripts/trigger.sh https://<otel-javascript domain> downstream 5
 ```
 
-Then open **Tools → Errors** and **Tools → Traces** (filter by application, or *Errors only*).
+Then open **Tools → Errors** and **Tools → Traces** (filter by application, or _Errors only_).
 
 ## Running one locally
 
