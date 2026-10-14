@@ -15,7 +15,7 @@
       },
       { "step": "build", "include": ["/app/.venv", "/app/python"] }
     ],
-    "startCommand": "cd /app/python && /app/.venv/bin/opentelemetry-instrument /app/.venv/bin/python app.py",
+    "startCommand": "cd /app/python && exec /app/.venv/bin/opentelemetry-instrument /app/.venv/bin/python app.py",
     "variables": {
       "PYTHONUNBUFFERED": "1",
       "OTEL_TRACES_EXPORTER": "otlp_proto_http",

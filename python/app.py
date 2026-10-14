@@ -7,6 +7,8 @@ OTEL_* variables Formatio injects, the way a real application would be.
 import json
 import os
 import random
+import signal
+import sys
 import time
 import urllib.request
 from urllib.error import HTTPError
@@ -154,4 +156,7 @@ def record(error):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
     print(f"otel-python listening on :{port}, exporting to {os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT')}")
+    # As PID 1 in a container, Python ignores SIGTERM unless it handles it. Exiting through
+    # sys.exit runs the SDK's atexit hook, which flushes the spans still batched.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     app.run(host="0.0.0.0", port=port)

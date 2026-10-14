@@ -198,8 +198,16 @@ function sleep(ms) {
 }
 
 const port = process.env.PORT || 8080
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(
     `otel-javascript listening on :${port}, exporting to ${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}`,
   )
+})
+
+// As PID 1 in a container, Node ignores SIGTERM unless something handles it. The register hook
+// does, but only to flush spans, so stop accepting requests here and let the process drain out;
+// the timer bounds a stuck keep-alive socket well inside Docker's 10 s grace.
+process.on('SIGTERM', () => {
+  server.close()
+  setTimeout(() => process.exit(0), 5000).unref()
 })

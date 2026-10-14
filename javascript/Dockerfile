@@ -10,4 +10,5 @@ ENV OTEL_METRICS_EXPORTER=none \
     OTEL_NODE_RESOURCE_DETECTORS=env,host,os,process,serviceinstance,container \
     NODE_ENV=production
 EXPOSE 8080
-CMD ["npm", "start"]
+# Not `npm start`: npm would take the signals and log every stop as a failed command.
+CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "app.js"]

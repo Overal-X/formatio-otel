@@ -46,7 +46,7 @@
         ]
       }
     ],
-    "startCommand": "cd /app/javascript && npm start",
+    "startCommand": "cd /app/javascript && exec node --require @opentelemetry/auto-instrumentations-node/register app.js",
     "variables": {
       "NODE_ENV": "production",
       "OTEL_METRICS_EXPORTER": "none",
