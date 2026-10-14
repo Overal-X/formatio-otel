@@ -21,7 +21,7 @@ tracer = trace.get_tracer("otel-python")
 
 @app.get("/")
 def index():
-    return "otel-python: /ok /slow?ms=1500 /exception /not-found/<id> /status-500 /crash /downstream?path=/exception\n"
+    return "otel-python: /ok /slow?ms=1500 /exception /not-found/<id> /status-500 /crash /downstream?path=/exception, POST /charge (checkout scenario)\n"
 
 
 @app.get("/healthz")
@@ -95,6 +95,20 @@ def downstream():
                 Status(StatusCode.ERROR, f"downstream answered {error.code}")
             )
         return f"downstream {base}{path} → {error.code}: {error.read().decode()}", 502
+
+
+@app.post("/charge")
+def charge():
+    """The checkout scenario's payments service (see the README). It trusts the amount the
+    orders API sends, so a null total from a frontend that failed to price the cart falls
+    over here, two services away from where it started."""
+    payment = request.get_json(force=True)
+    with tracer.start_as_current_span("compute fees") as span:
+        span.set_attribute("payment.currency", payment.get("currency", ""))
+        fee = round(payment["amount"] * 0.029 + 0.30, 2)  # TypeError when amount is null
+    with tracer.start_as_current_span("capture payment"):
+        time.sleep((10 + random.random() * 30) / 1000)
+    return {"status": "captured", "amount": payment["amount"], "fee": fee}, 201
 
 
 @app.errorhandler(Exception)

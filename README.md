@@ -27,6 +27,49 @@ traces arrive, the injection works.
 | `/downstream?path=/exception` | Calls `DOWNSTREAM_URL` + path                     | **One trace across two apps**, the thrower marked _origin_; the caller gets its own `/downstream` group, the thrower its exception group |
 | `/healthz`                    | 200                                               | —                                                                                                                                        |
 
+## Scenario: a frontend error that breaks the services behind it
+
+`GET /checkout` on the **JavaScript** app runs a checkout through all three apps:
+
+```
+JavaScript (frontend)          Go (orders API)              Python (payments)
+GET /checkout
+ └ price cart  ✗ PriceFormatError: cannot price kb-01: "1,299.00"   ← recorded, then swallowed
+ └ POST /orders  { total: null } ─▶ POST /orders
+                                  └ reserve inventory
+                                  └ POST /charge { amount: null } ─▶ POST /charge
+                                                                    └ compute fees ✗ TypeError
+                                  └ release inventory  ◀── 500
+ ◀── 502 "payment service answered 500"
+502 to the user
+```
+
+The frontend's bug is swallowing its own error and sending the order on anyway; nothing fails
+there yet. The failure surfaces two services later, in payments, and travels back as 502s.
+
+What Formatio should show:
+
+- **Tools → Traces**: one trace spanning all three applications. The waterfall labels the
+  frontend's `price cart` span **origin** — the first exception in the trace — even though the
+  crash happened in payments.
+- **Tools → Errors**: `PriceFormatError` (JavaScript), `TypeError` (Python, recorded at both
+  `compute fees` and the request but counted once), and a status-only `POST /orders` group (Go,
+  "HTTP 502" — Go's HTTP instrumentation sets that status itself). The frontend's own 502 opens no
+  extra group: its trace already recorded the exception that caused it.
+
+`GET /checkout?healthy=1` sends clean prices and succeeds end to end — compare the two traces.
+
+It needs two variables, besides the `DOWNSTREAM_URL` ring below (use your application names as
+the hostnames):
+
+- JavaScript: `ORDERS_URL=http://otel-go:8080`
+- Go: `PAYMENTS_URL=http://otel-python:8080`
+
+```sh
+scripts/trigger.sh https://<javascript app domain> checkout 5
+scripts/trigger.sh https://<javascript app domain> checkout-ok 5
+```
+
 ## Deploy on Formatio
 
 Create three applications from this repository in **one project** (so they share its

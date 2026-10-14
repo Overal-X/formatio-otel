@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -56,6 +58,7 @@ func main() {
 	mux.HandleFunc("GET /status-500", status500)
 	mux.HandleFunc("GET /crash", crash)
 	mux.HandleFunc("GET /downstream", downstream)
+	mux.HandleFunc("POST /orders", createOrder)
 
 	// recoverPanics sits inside otelhttp so the server span is still current when it records.
 	handler := otelhttp.NewHandler(recoverPanics(mux), "otel-go",
@@ -99,7 +102,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	fmt.Fprintln(w, "otel-go: /ok /slow?ms=1500 /exception /not-found/{id} /status-500 /crash /downstream?path=/exception")
+	fmt.Fprintln(w, "otel-go: /ok /slow?ms=1500 /exception /not-found/{id} /status-500 /crash /downstream?path=/exception, POST /orders (checkout scenario)")
 }
 
 // ok makes a small tree of child spans: the happy path the waterfall should nest.
@@ -203,4 +206,62 @@ func recoverPanics(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// The checkout scenario (see the README): the frontend posts an order here, and this service
+// plays the orders API between it and payments.
+type order struct {
+	Items []struct {
+		SKU string `json:"sku"`
+		Qty int    `json:"qty"`
+	} `json:"items"`
+	// Total is null when the frontend failed to price the cart and sent the order anyway.
+	Total *float64 `json:"total"`
+}
+
+// createOrder trusts the total it is given — the bug that lets a frontend failure travel on:
+// it reserves stock, asks payments to charge a null amount, and only finds out when payments
+// falls over.
+func createOrder(w http.ResponseWriter, r *http.Request) {
+	var o order
+	if err := json.NewDecoder(r.Body).Decode(&o); err != nil {
+		fail(w, r, err, http.StatusBadRequest)
+		return
+	}
+	base := os.Getenv("PAYMENTS_URL")
+	if base == "" {
+		http.Error(w, "set PAYMENTS_URL (e.g. http://otel-python:8080)", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	_, reserve := tracer.Start(ctx, "reserve inventory", trace.WithAttributes(attribute.Int("order.items", len(o.Items))))
+	time.Sleep(time.Duration(10+rand.IntN(20)) * time.Millisecond)
+	reserve.End()
+
+	body, _ := json.Marshal(map[string]any{"amount": o.Total, "currency": "USD"})
+	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport), Timeout: 10 * time.Second}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/charge", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+	}
+	if err != nil || resp.StatusCode >= 500 {
+		_, release := tracer.Start(ctx, "release inventory")
+		time.Sleep(time.Duration(5+rand.IntN(10)) * time.Millisecond)
+		release.End()
+
+		reason := "payment service unreachable"
+		if err == nil {
+			reason = fmt.Sprintf("payment service answered %d", resp.StatusCode)
+		}
+		trace.SpanFromContext(ctx).SetStatus(codes.Error, reason)
+		http.Error(w, reason, http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"order": fmt.Sprintf("ord_%d", rand.IntN(1_000_000)), "charged": o.Total})
 }

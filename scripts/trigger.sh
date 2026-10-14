@@ -12,6 +12,8 @@
 #   status-500  500 with no exception → a status-only group named after the route
 #   crash       Go panic / rejected promise / ZeroDivisionError
 #   downstream  calls DOWNSTREAM_URL/exception → one trace across two apps, origin marked
+#   checkout    frontend error that breaks orders and payments (run against the JavaScript app)
+#   checkout-ok the same flow with clean prices, for comparison
 set -euo pipefail
 
 base="${1:?usage: trigger.sh <base-url> <scenario> [count]}"
@@ -28,6 +30,8 @@ for i in $(seq 1 "$count"); do
     status-500) path="/status-500" ;;
     crash) path="/crash" ;;
     downstream) path="/downstream?path=/exception" ;;
+    checkout) path="/checkout" ;;
+    checkout-ok) path="/checkout?healthy=1" ;;
     *) echo "unknown scenario: $scenario" >&2; exit 2 ;;
   esac
   status=$(curl -sk -o /dev/null -w '%{http_code}' "$base$path")
