@@ -30,6 +30,6 @@ for i in $(seq 1 "$count"); do
     downstream) path="/downstream?path=/exception" ;;
     *) echo "unknown scenario: $scenario" >&2; exit 2 ;;
   esac
-  status=$(curl -s -o /dev/null -w '%{http_code}' "$base$path")
+  status=$(curl -sk -o /dev/null -w '%{http_code}' "$base$path")
   printf '%3s/%-3s %s %s\n' "$i" "$count" "$status" "$path"
 done
