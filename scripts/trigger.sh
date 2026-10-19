@@ -38,6 +38,8 @@ for i in $(seq 1 "$count"); do
     dashboard-ok) path="/dashboard?healthy=1" ;;
     *) echo "unknown scenario: $scenario" >&2; exit 2 ;;
   esac
-  status=$(curl -sk -o /dev/null -w '%{http_code}' "$base$path")
+  # A panic or crash can drop the connection: curl still prints 000 but exits non-zero, which
+  # set -e would turn into skipping the remaining requests.
+  status=$(curl -sk -o /dev/null -w '%{http_code}' "$base$path" || true)
   printf '%3s/%-3s %s %s\n' "$i" "$count" "$status" "$path"
 done
