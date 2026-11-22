@@ -12,5 +12,9 @@ func shippingTotal(w http.ResponseWriter, r *http.Request) {
 		quote = nil
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]int{"shippingCents": quote.Cents})
+	cents := 0
+	if quote != nil {
+		cents = quote.Cents
+	}
+	_ = json.NewEncoder(w).Encode(map[string]int{"shippingCents": cents})
 }
