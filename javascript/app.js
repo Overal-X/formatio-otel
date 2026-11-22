@@ -4,6 +4,7 @@
 // CommonJS on purpose: require-time patching is the path auto-instrumentation supports best.
 const express = require('express')
 const { SpanStatusCode, trace } = require('@opentelemetry/api')
+const { cartTotal } = require('./cart-total')
 
 const tracer = trace.getTracer('otel-javascript')
 const app = express()
@@ -15,6 +16,11 @@ app.get('/', (_req, res) => {
 })
 
 app.get('/healthz', (_req, res) => res.send('ok'))
+
+app.get('/ai-sre/cart-total', (req, res) => {
+  const cart = req.query.empty === '1' ? {} : { items: [{ cents: 250 }] }
+  res.json({ totalCents: cartTotal(cart) })
+})
 
 // A small tree of child spans: the happy path the waterfall should nest.
 app.get('/ok', async (_req, res) => {

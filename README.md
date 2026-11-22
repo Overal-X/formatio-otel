@@ -27,6 +27,15 @@ traces arrive, the injection works.
 | `/downstream?path=/exception` | Calls `DOWNSTREAM_URL` + path                     | **One trace across two apps**, the thrower marked _origin_; the caller gets its own `/downstream` group, the thrower its exception group |
 | `/healthz`                    | 200                                               | —                                                                                                                                        |
 
+## Scenario: automatic fix PR (JavaScript)
+
+Enable **Automatic fix PRs** for the JavaScript application before triggering this
+fixture. Deploy the repository's default branch. `GET /ai-sre/cart-total` should return
+`{"totalCents":250}`. `GET /ai-sre/cart-total?empty=1` should return HTTP 500 for a cart
+without items; the recorded stack should point to `javascript/cart-total.js`.
+After triage, check the new issue for a draft PR. A correct fix returns
+`{"totalCents":0}` for the empty cart and preserves the normal total.
+
 ## Scenario: a frontend error that breaks the services behind it
 
 `GET /checkout` on the **JavaScript** app runs a checkout through all three apps:
