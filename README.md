@@ -27,7 +27,7 @@ traces arrive, the injection works.
 | `/downstream?path=/exception` | Calls `DOWNSTREAM_URL` + path                     | **One trace across two apps**, the thrower marked _origin_; the caller gets its own `/downstream` group, the thrower its exception group |
 | `/healthz`                    | 200                                               | —                                                                                                                                        |
 
-## Scenario: automatic fix PR (JavaScript)
+## Scenario: automatic fix PR
 
 Enable **Automatic fix PRs** for the JavaScript application before triggering this
 fixture. Deploy the repository's default branch. `GET /ai-sre/cart-total` should return
@@ -35,6 +35,11 @@ fixture. Deploy the repository's default branch. `GET /ai-sre/cart-total` should
 without items; the recorded stack should point to `javascript/cart-total.js`.
 After triage, check the new issue for a draft PR. A correct fix returns
 `{"totalCents":0}` for the empty cart and preserves the normal total.
+
+For the Go app, `GET /ai-sre/shipping-total` should return
+`{"shippingCents":350}`. `GET /ai-sre/shipping-total?pickup=1` should return
+HTTP 500 with a stack pointing to `go/shipping_total.go`. A correct fix returns
+`{"shippingCents":0}` for pickup and preserves the delivery total.
 
 ## Scenario: a frontend error that breaks the services behind it
 

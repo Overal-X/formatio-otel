@@ -52,6 +52,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", index)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /ai-sre/shipping-total", shippingTotal)
 	mux.HandleFunc("GET /ok", ok)
 	mux.HandleFunc("GET /slow", slow)
 	mux.HandleFunc("GET /exception", exception)
