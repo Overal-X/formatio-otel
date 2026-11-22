@@ -10,7 +10,7 @@ const app = express()
 
 app.get('/', (_req, res) => {
   res.send(
-    'otel-javascript: /ok /slow?ms=1500 /exception /not-found/:id /status-500 /crash /downstream?path=/exception /checkout[?healthy=1] /dashboard[?healthy=1]\n',
+    'otel-javascript: /healthz /ok /slow?ms=1500 /exception /not-found/:id /status-500 /crash /downstream?path=/exception /checkout[?healthy=1] /dashboard[?healthy=1]\n',
   )
 })
 
